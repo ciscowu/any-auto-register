@@ -48,6 +48,28 @@ CONFIG_KEYS = [
     "gptmail_base_url",
     "gptmail_api_key",
     "gptmail_domain",
+    "micmail_api_base",
+    "micmail_api_key",
+    "micmail_mailbox",
+    "micmail_account_page_size",
+    "micmail_message_page_size",
+    "micmail_refresh",
+    "micmail_category_key",
+    "micmail_category_name_zh",
+    "micmail_category_name_en",
+    "micmail_acquire_tag_key",
+    "micmail_acquire_tag_name",
+    "micmail_acquire_tag_name_en",
+    "micmail_status_acquired_name",
+    "micmail_status_registered_name",
+    "micmail_status_success_name",
+    "micmail_status_register_fail_name",
+    "micmail_status_oauth_fail_name",
+    "micmail_status_key_acquired",
+    "micmail_status_key_registered",
+    "micmail_status_key_success",
+    "micmail_status_key_register_failed",
+    "micmail_status_key_oauth_failed",
     "opentrashmail_api_url",
     "opentrashmail_domain",
     "opentrashmail_password",
@@ -131,6 +153,48 @@ def get_config():
         all_cfg["outlook_backend"] = "graph"
     if not all_cfg.get("gptmail_base_url"):
         all_cfg["gptmail_base_url"] = "https://mail.chatgpt.org.uk"
+    if not all_cfg.get("micmail_api_base"):
+        all_cfg["micmail_api_base"] = "https://micrmail.startdo.cloud"
+    if not all_cfg.get("micmail_mailbox"):
+        all_cfg["micmail_mailbox"] = "all"
+    if not all_cfg.get("micmail_account_page_size"):
+        all_cfg["micmail_account_page_size"] = 50
+    if not all_cfg.get("micmail_message_page_size"):
+        all_cfg["micmail_message_page_size"] = 20
+    if str(all_cfg.get("micmail_refresh", "")).strip() == "":
+        all_cfg["micmail_refresh"] = True
+    if not all_cfg.get("micmail_category_key"):
+        all_cfg["micmail_category_key"] = "openai_pool"
+    if not all_cfg.get("micmail_category_name_zh"):
+        all_cfg["micmail_category_name_zh"] = "OpenAI 账号池"
+    if not all_cfg.get("micmail_category_name_en"):
+        all_cfg["micmail_category_name_en"] = "openai_pool"
+    if not all_cfg.get("micmail_acquire_tag_key"):
+        all_cfg["micmail_acquire_tag_key"] = "unused"
+    if not all_cfg.get("micmail_acquire_tag_name"):
+        all_cfg["micmail_acquire_tag_name"] = "未用"
+    if not all_cfg.get("micmail_acquire_tag_name_en"):
+        all_cfg["micmail_acquire_tag_name_en"] = "unused"
+    if not all_cfg.get("micmail_status_acquired_name"):
+        all_cfg["micmail_status_acquired_name"] = "处理中"
+    if not all_cfg.get("micmail_status_registered_name"):
+        all_cfg["micmail_status_registered_name"] = "已注册"
+    if not all_cfg.get("micmail_status_success_name"):
+        all_cfg["micmail_status_success_name"] = "已完成"
+    if not all_cfg.get("micmail_status_register_fail_name"):
+        all_cfg["micmail_status_register_fail_name"] = "注册失败"
+    if not all_cfg.get("micmail_status_oauth_fail_name"):
+        all_cfg["micmail_status_oauth_fail_name"] = "OAuth 失败"
+    if not all_cfg.get("micmail_status_key_acquired"):
+        all_cfg["micmail_status_key_acquired"] = "processing"
+    if not all_cfg.get("micmail_status_key_registered"):
+        all_cfg["micmail_status_key_registered"] = "registered"
+    if not all_cfg.get("micmail_status_key_success"):
+        all_cfg["micmail_status_key_success"] = "completed"
+    if not all_cfg.get("micmail_status_key_register_failed"):
+        all_cfg["micmail_status_key_register_failed"] = "register_failed"
+    if not all_cfg.get("micmail_status_key_oauth_failed"):
+        all_cfg["micmail_status_key_oauth_failed"] = "oauth_failed"
     if not all_cfg.get("luckmail_base_url"):
         all_cfg["luckmail_base_url"] = "https://mails.luckyous.com/"
     if not str(all_cfg.get("contribution_enabled", "") or "").strip():

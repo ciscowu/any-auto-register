@@ -291,6 +291,44 @@ def create_mailbox(
             domain=extra.get("gptmail_domain", ""),
             proxy=proxy,
         )
+    elif provider == "micmail":
+        return MicMailMailbox(
+            api_url=extra.get("micmail_api_base", "https://micrmail.startdo.cloud"),
+            api_key=extra.get("micmail_api_key", ""),
+            mailbox=extra.get("micmail_mailbox", "all"),
+            account_page_size=extra.get("micmail_account_page_size", 50),
+            message_page_size=extra.get("micmail_message_page_size", 20),
+            refresh=extra.get("micmail_refresh", True),
+            category_key=extra.get("micmail_category_key", "openai_pool"),
+            category_name_zh=extra.get("micmail_category_name_zh", "OpenAI 账号池"),
+            category_name_en=extra.get("micmail_category_name_en", "openai_pool"),
+            acquire_tag_key=extra.get("micmail_acquire_tag_key", "unused"),
+            acquire_tag_name=extra.get("micmail_acquire_tag_name", "未用"),
+            acquire_tag_name_en=extra.get("micmail_acquire_tag_name_en", "unused"),
+            status_acquired_name=extra.get("micmail_status_acquired_name", "处理中"),
+            status_registered_name=extra.get("micmail_status_registered_name", "已注册"),
+            status_success_name=extra.get("micmail_status_success_name", "已完成"),
+            status_register_fail_name=extra.get(
+                "micmail_status_register_fail_name", "注册失败"
+            ),
+            status_oauth_fail_name=extra.get(
+                "micmail_status_oauth_fail_name", "OAuth 失败"
+            ),
+            status_key_acquired=extra.get(
+                "micmail_status_key_acquired", "processing"
+            ),
+            status_key_registered=extra.get(
+                "micmail_status_key_registered", "registered"
+            ),
+            status_key_success=extra.get("micmail_status_key_success", "completed"),
+            status_key_register_failed=extra.get(
+                "micmail_status_key_register_failed", "register_failed"
+            ),
+            status_key_oauth_failed=extra.get(
+                "micmail_status_key_oauth_failed", "oauth_failed"
+            ),
+            proxy=proxy,
+        )
     elif provider == "applemail":
         return AppleMailMailbox(
             api_url=extra.get("applemail_base_url", "https://www.appleemail.top"),
@@ -1995,6 +2033,456 @@ class GPTMailMailbox(BaseMailbox):
                     if code:
                         self._log(f"[GPTMail] 收到验证码: {code}")
                         return code
+            except Exception:
+                pass
+            return None
+
+        return self._run_polling_wait(
+            timeout=timeout,
+            poll_interval=3,
+            poll_once=poll_once,
+        )
+
+
+class MicMailMailbox(BaseMailbox):
+    """MicMail 邮箱池服务"""
+
+    _classification_lock = threading.Lock()
+
+    def __init__(
+        self,
+        api_url: str = "https://micrmail.startdo.cloud",
+        api_key: str = "",
+        mailbox: str = "all",
+        account_page_size: Any = 50,
+        message_page_size: Any = 20,
+        refresh: Any = True,
+        category_key: str = "openai_pool",
+        category_name_zh: str = "OpenAI 账号池",
+        category_name_en: str = "openai_pool",
+        acquire_tag_key: str = "unused",
+        acquire_tag_name: str = "未用",
+        acquire_tag_name_en: str = "unused",
+        status_acquired_name: str = "处理中",
+        status_registered_name: str = "已注册",
+        status_success_name: str = "已完成",
+        status_register_fail_name: str = "注册失败",
+        status_oauth_fail_name: str = "OAuth 失败",
+        status_key_acquired: str = "processing",
+        status_key_registered: str = "registered",
+        status_key_success: str = "completed",
+        status_key_register_failed: str = "register_failed",
+        status_key_oauth_failed: str = "oauth_failed",
+        proxy: str = None,
+    ):
+        self.api = str(api_url or "https://micrmail.startdo.cloud").strip().rstrip("/")
+        self.api_key = str(api_key or "").strip()
+        self.mailbox = str(mailbox or "all").strip().lower() or "all"
+        self.account_page_size = self._to_int(account_page_size, 50, minimum=20)
+        self.message_page_size = self._to_int(message_page_size, 20, minimum=1)
+        self.refresh = self._to_bool(refresh)
+        self.category = {
+            "key": str(category_key or "openai_pool").strip() or "openai_pool",
+            "name_zh": str(category_name_zh or "OpenAI 账号池").strip() or "OpenAI 账号池",
+            "name_en": str(category_name_en or "openai_pool").strip() or "openai_pool",
+        }
+        self.acquire_tag = {
+            "key": str(acquire_tag_key or "unused").strip() or "unused",
+            "name_zh": str(acquire_tag_name or "未用").strip() or "未用",
+            "name_en": str(acquire_tag_name_en or "unused").strip() or "unused",
+        }
+        self.status = {
+            "acquired_name": str(status_acquired_name or "处理中").strip() or "处理中",
+            "registered_name": str(status_registered_name or "已注册").strip() or "已注册",
+            "success_name": str(status_success_name or "已完成").strip() or "已完成",
+            "register_fail_name": str(status_register_fail_name or "注册失败").strip()
+            or "注册失败",
+            "oauth_fail_name": str(status_oauth_fail_name or "OAuth 失败").strip()
+            or "OAuth 失败",
+        }
+        self.status_keys = {
+            "acquired": str(status_key_acquired or "processing").strip()
+            or "processing",
+            "registered": str(status_key_registered or "registered").strip()
+            or "registered",
+            "success": str(status_key_success or "completed").strip() or "completed",
+            "register_failed": str(
+                status_key_register_failed or "register_failed"
+            ).strip()
+            or "register_failed",
+            "oauth_failed": str(status_key_oauth_failed or "oauth_failed").strip()
+            or "oauth_failed",
+        }
+        self.proxy = build_requests_proxy_config(proxy)
+        self._category_key_to_item: dict[str, dict] = {}
+        self._tag_key_to_item: dict[str, dict] = {}
+
+    @staticmethod
+    def _to_int(value: Any, default: int, *, minimum: int = 1) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(parsed, minimum)
+
+    @staticmethod
+    def _to_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": self.api_key,
+            "Content-Type": "application/json",
+        }
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        json_body: dict | None = None,
+        timeout: int = 15,
+    ) -> Any:
+        import requests
+
+        response = requests.request(
+            method,
+            f"{self.api}{path}",
+            params=params,
+            json=json_body,
+            headers=self._headers(),
+            proxies=self.proxy,
+            timeout=timeout,
+        )
+        if response.status_code < 200 or response.status_code >= 300:
+            preview = (response.text or "")[:200]
+            raise RuntimeError(
+                f"MicMail API {path} 失败: HTTP {response.status_code} {preview}"
+            )
+        if not getattr(response, "content", b""):
+            return {}
+        try:
+            return response.json()
+        except ValueError:
+            return {}
+
+    @staticmethod
+    def _quote_path(value: str) -> str:
+        from urllib.parse import quote
+
+        return quote(str(value or "").strip(), safe="")
+
+    def _tag_specs(self) -> list[dict[str, str]]:
+        raw_specs = [
+            self.acquire_tag,
+            {
+                "key": self.status_keys["acquired"],
+                "name_zh": self.status["acquired_name"],
+                "name_en": self.status_keys["acquired"],
+            },
+            {
+                "key": self.status_keys["registered"],
+                "name_zh": self.status["registered_name"],
+                "name_en": self.status_keys["registered"],
+            },
+            {
+                "key": self.status_keys["success"],
+                "name_zh": self.status["success_name"],
+                "name_en": self.status_keys["success"],
+            },
+            {
+                "key": self.status_keys["register_failed"],
+                "name_zh": self.status["register_fail_name"],
+                "name_en": self.status_keys["register_failed"],
+            },
+            {
+                "key": self.status_keys["oauth_failed"],
+                "name_zh": self.status["oauth_fail_name"],
+                "name_en": self.status_keys["oauth_failed"],
+            },
+        ]
+        specs: list[dict[str, str]] = []
+        seen_keys: set[str] = set()
+        for item in raw_specs:
+            key = str((item or {}).get("key") or "").strip()
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            specs.append(item)
+        return specs
+
+    def _refresh_classifications(self) -> tuple[dict[str, dict], dict[str, dict]]:
+        body = self._request_json("GET", "/classifications", timeout=10)
+        categories = body.get("categories") or []
+        tags = body.get("tags") or []
+        self._category_key_to_item = {
+            item.get("key"): item for item in categories if isinstance(item, dict) and item.get("key")
+        }
+        self._tag_key_to_item = {
+            item.get("key"): item for item in tags if isinstance(item, dict) and item.get("key")
+        }
+        return self._category_key_to_item, self._tag_key_to_item
+
+    def _ensure_classifications(self) -> None:
+        with self._classification_lock:
+            category_map = self._category_key_to_item
+            tag_map = self._tag_key_to_item
+            if not category_map or not tag_map:
+                category_map, tag_map = self._refresh_classifications()
+
+            missing_tags = [item for item in self._tag_specs() if item["key"] not in tag_map]
+            created = False
+
+            if self.category["key"] not in category_map:
+                self._request_json(
+                    "POST",
+                    "/classifications/categories",
+                    json_body={
+                        "name_zh": self.category["name_zh"],
+                        "name_en": self.category["name_en"],
+                    },
+                    timeout=10,
+                )
+                created = True
+
+            for tag in missing_tags:
+                self._request_json(
+                    "POST",
+                    "/classifications/tags",
+                    json_body={
+                        "name_zh": tag["name_zh"],
+                        "name_en": tag["name_en"],
+                    },
+                    timeout=10,
+                )
+                created = True
+
+            if created:
+                category_map, tag_map = self._refresh_classifications()
+
+            if self.category["key"] not in category_map:
+                raise RuntimeError("micmail_category_missing")
+            for tag in self._tag_specs():
+                if tag["key"] not in tag_map:
+                    raise RuntimeError(f"micmail_tag_missing:{tag['key']}")
+
+    def _list_accounts(
+        self,
+        *,
+        page: int = 1,
+        email_search: str = "",
+        tag_key: str = "",
+        category_key: str = "",
+    ) -> dict[str, Any]:
+        return self._request_json(
+            "GET",
+            "/accounts",
+            params={
+                "page": page,
+                "page_size": self.account_page_size,
+                "email_search": email_search,
+                "tag_search": "",
+                "category_search": "",
+                "category_key": category_key,
+                "tag_key": tag_key,
+            },
+            timeout=10,
+        )
+
+    def _find_account_by_email(self, email: str) -> dict[str, Any] | None:
+        body = self._list_accounts(page=1, email_search=email)
+        for item in body.get("accounts") or []:
+            if isinstance(item, dict) and item.get("email_id") == email:
+                return item
+        return None
+
+    def _normalize_identity(self, item: dict[str, Any]) -> MailboxAccount:
+        email = str(item.get("email_id") or "").strip()
+        if not email:
+            raise RuntimeError("micmail_api_invalid_payload")
+        client_id = str(item.get("client_id") or "").strip()
+        return MailboxAccount(
+            email=email,
+            account_id=email,
+            extra={
+                "provider": "micmail",
+                "client_id": client_id,
+                "status": item.get("status") or "",
+                "category_key": item.get("category_key") or "",
+                "tag_keys": list(item.get("tag_keys") or []),
+            },
+        )
+
+    def _verify_account_status(self, email: str, expected_tag_key: str) -> None:
+        account = self._find_account_by_email(email)
+        if not account:
+            raise RuntimeError("micmail_identity_not_found")
+        actual_category = str(account.get("category_key") or "").strip()
+        actual_tags = list(account.get("tag_keys") or [])
+        if actual_category != self.category["key"] or actual_tags != [expected_tag_key]:
+            raise RuntimeError("micmail_api_tag_not_applied")
+
+    def _update_account_status(self, email: str, tag_key: str) -> None:
+        self._ensure_classifications()
+        self._request_json(
+            "PUT",
+            f"/accounts/{self._quote_path(email)}/classification",
+            json_body={
+                "category_key": self.category["key"],
+                "tag_keys": [tag_key],
+            },
+            timeout=10,
+        )
+        self._verify_account_status(email, tag_key)
+
+    def _folders_to_scan(self) -> list[str]:
+        if self.mailbox in {"all", "junk"}:
+            return [self.mailbox]
+        return ["inbox", "junk"]
+
+    def _parse_message_ts(self, payload: dict[str, Any]) -> int:
+        from datetime import datetime
+
+        if not isinstance(payload, dict):
+            return 0
+        for key in ("posix-millis", "timestamp", "time", "received_at_ms", "sent_at_ms"):
+            value = payload.get(key)
+            if isinstance(value, (int, float)) and value > 0:
+                return int(value)
+        for key in ("date", "received_at", "sent_at", "created_at", "updated_at"):
+            raw = payload.get(key)
+            if not raw:
+                continue
+            try:
+                return int(
+                    datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp()
+                    * 1000
+                )
+            except ValueError:
+                continue
+        return 0
+
+    def _list_messages(self, email: str, folder: str) -> list[dict[str, Any]]:
+        body = self._request_json(
+            "GET",
+            f"/emails/{self._quote_path(email)}",
+            params={
+                "folder": folder,
+                "page": 1,
+                "page_size": self.message_page_size,
+                "refresh": str(bool(self.refresh)).lower(),
+            },
+            timeout=10,
+        )
+        return [item for item in (body.get("emails") or []) if isinstance(item, dict)]
+
+    def _get_message_detail(self, email: str, message_id: str) -> dict[str, Any]:
+        body = self._request_json(
+            "GET",
+            f"/emails/{self._quote_path(email)}/{self._quote_path(message_id)}",
+            timeout=10,
+        )
+        return body if isinstance(body, dict) else {}
+
+    def get_email(self) -> MailboxAccount:
+        self._ensure_classifications()
+
+        current_page = 1
+        total_pages = 1
+        while current_page <= total_pages:
+            body = self._list_accounts(
+                page=current_page,
+                tag_key=self.acquire_tag["key"],
+                category_key=self.category["key"],
+            )
+            total_pages = max(int(body.get("total_pages") or 1), 1)
+            for item in body.get("accounts") or []:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("status") or "active").lower() not in {
+                    "active",
+                    "enabled",
+                    "healthy",
+                }:
+                    continue
+                account = self._normalize_identity(item)
+                self._update_account_status(
+                    account.email,
+                    self.status_keys["acquired"],
+                )
+                return account
+            current_page += 1
+
+        raise RuntimeError("micmail_pool_empty")
+
+    def get_current_ids(self, account: MailboxAccount) -> set:
+        try:
+            ids: set[str] = set()
+            for folder in self._folders_to_scan():
+                for message in self._list_messages(account.email, folder):
+                    message_id = str(message.get("message_id") or "").strip()
+                    if message_id:
+                        ids.add(message_id)
+            return ids
+        except Exception:
+            return set()
+
+    def wait_for_code(
+        self,
+        account: MailboxAccount,
+        keyword: str = "",
+        timeout: int = 120,
+        before_ids: set = None,
+        code_pattern: str = None,
+        **kwargs,
+    ) -> str:
+        import re
+
+        seen = {str(mid) for mid in (before_ids or set())}
+        exclude_codes = {
+            str(code) for code in (kwargs.get("exclude_codes") or set()) if code
+        }
+        since_ts = 0
+        otp_sent_at = kwargs.get("otp_sent_at")
+        if isinstance(otp_sent_at, (int, float)) and otp_sent_at > 0:
+            since_ts = int(float(otp_sent_at) * 1000)
+
+        def poll_once() -> Optional[str]:
+            try:
+                for folder in self._folders_to_scan():
+                    for message in self._list_messages(account.email, folder):
+                        message_id = str(message.get("message_id") or "").strip()
+                        if not message_id or message_id in seen:
+                            continue
+                        detail = self._get_message_detail(account.email, message_id)
+                        parsed_ts = self._parse_message_ts(detail)
+                        if parsed_ts and since_ts and parsed_ts < since_ts:
+                            continue
+                        seen.add(message_id)
+                        candidates = [
+                            str(message.get("subject") or ""),
+                            str(detail.get("subject") or ""),
+                            str(detail.get("body_plain") or ""),
+                            str(detail.get("body_html") or ""),
+                        ]
+                        search_text = "\n".join(item for item in candidates if item)
+                        search_text = re.sub(
+                            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+                            "",
+                            search_text,
+                        )
+                        if keyword and keyword.lower() not in search_text.lower():
+                            continue
+                        code = self._safe_extract(search_text, code_pattern)
+                        if code and code in exclude_codes:
+                            continue
+                        if code:
+                            self._log(f"[MicMail] 收到验证码: {code}")
+                            return code
             except Exception:
                 pass
             return None
