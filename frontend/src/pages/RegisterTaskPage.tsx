@@ -73,6 +73,31 @@ export default function RegisterTaskPage() {
         gptmail_base_url: cfg.gptmail_base_url || 'https://mail.chatgpt.org.uk',
         gptmail_api_key: cfg.gptmail_api_key || '',
         gptmail_domain: cfg.gptmail_domain || '',
+        micmail_api_base: cfg.micmail_api_base || 'https://micrmail.startdo.cloud',
+        micmail_api_key: cfg.micmail_api_key || '',
+        micmail_mailbox: cfg.micmail_mailbox || 'all',
+        micmail_account_page_size: cfg.micmail_account_page_size || 50,
+        micmail_message_page_size: cfg.micmail_message_page_size || 20,
+        micmail_refresh:
+          String(cfg.micmail_refresh ?? '').trim() === ''
+            ? true
+            : parseBooleanConfigValue(cfg.micmail_refresh),
+        micmail_category_key: cfg.micmail_category_key || 'openai_pool',
+        micmail_category_name_zh: cfg.micmail_category_name_zh || 'OpenAI 账号池',
+        micmail_category_name_en: cfg.micmail_category_name_en || 'openai_pool',
+        micmail_acquire_tag_key: cfg.micmail_acquire_tag_key || 'unused',
+        micmail_acquire_tag_name: cfg.micmail_acquire_tag_name || '未用',
+        micmail_acquire_tag_name_en: cfg.micmail_acquire_tag_name_en || 'unused',
+        micmail_status_acquired_name: cfg.micmail_status_acquired_name || '处理中',
+        micmail_status_registered_name: cfg.micmail_status_registered_name || '已注册',
+        micmail_status_success_name: cfg.micmail_status_success_name || '已完成',
+        micmail_status_register_fail_name: cfg.micmail_status_register_fail_name || '注册失败',
+        micmail_status_oauth_fail_name: cfg.micmail_status_oauth_fail_name || 'OAuth 失败',
+        micmail_status_key_acquired: cfg.micmail_status_key_acquired || 'processing',
+        micmail_status_key_registered: cfg.micmail_status_key_registered || 'registered',
+        micmail_status_key_success: cfg.micmail_status_key_success || 'completed',
+        micmail_status_key_register_failed: cfg.micmail_status_key_register_failed || 'register_failed',
+        micmail_status_key_oauth_failed: cfg.micmail_status_key_oauth_failed || 'oauth_failed',
         opentrashmail_api_url: cfg.opentrashmail_api_url || '',
         opentrashmail_domain: cfg.opentrashmail_domain || '',
         opentrashmail_password: cfg.opentrashmail_password || '',
@@ -125,6 +150,28 @@ export default function RegisterTaskPage() {
       gptmail_base_url: values.gptmail_base_url,
       gptmail_api_key: values.gptmail_api_key,
       gptmail_domain: values.gptmail_domain,
+      micmail_api_base: values.micmail_api_base,
+      micmail_api_key: values.micmail_api_key,
+      micmail_mailbox: values.micmail_mailbox,
+      micmail_account_page_size: values.micmail_account_page_size,
+      micmail_message_page_size: values.micmail_message_page_size,
+      micmail_refresh: values.micmail_refresh,
+      micmail_category_key: values.micmail_category_key,
+      micmail_category_name_zh: values.micmail_category_name_zh,
+      micmail_category_name_en: values.micmail_category_name_en,
+      micmail_acquire_tag_key: values.micmail_acquire_tag_key,
+      micmail_acquire_tag_name: values.micmail_acquire_tag_name,
+      micmail_acquire_tag_name_en: values.micmail_acquire_tag_name_en,
+      micmail_status_acquired_name: values.micmail_status_acquired_name,
+      micmail_status_registered_name: values.micmail_status_registered_name,
+      micmail_status_success_name: values.micmail_status_success_name,
+      micmail_status_register_fail_name: values.micmail_status_register_fail_name,
+      micmail_status_oauth_fail_name: values.micmail_status_oauth_fail_name,
+      micmail_status_key_acquired: values.micmail_status_key_acquired,
+      micmail_status_key_registered: values.micmail_status_key_registered,
+      micmail_status_key_success: values.micmail_status_key_success,
+      micmail_status_key_register_failed: values.micmail_status_key_register_failed,
+      micmail_status_key_oauth_failed: values.micmail_status_key_oauth_failed,
       opentrashmail_api_url: values.opentrashmail_api_url,
       opentrashmail_domain: values.opentrashmail_domain,
       opentrashmail_password: values.opentrashmail_password,
@@ -321,6 +368,7 @@ export default function RegisterTaskPage() {
                 { value: 'cloudmail', label: 'CloudMail (genToken)' },
                 { value: 'maliapi', label: 'YYDS Mail / MaliAPI' },
                 { value: 'gptmail', label: 'GPTMail' },
+                { value: 'micmail', label: 'MicMail' },
                 { value: 'opentrashmail', label: 'OpenTrashMail' },
                 { value: 'duckmail', label: 'DuckMail' },
                 { value: 'freemail', label: 'Freemail' },
@@ -462,6 +510,70 @@ export default function RegisterTaskPage() {
               >
                 <Input placeholder="example.com" />
               </Form.Item>
+            </>
+          )}
+          {mailProvider === 'micmail' && (
+            <>
+              <Form.Item name="micmail_api_base" label="API URL" rules={[{ required: true, message: '请输入 MicMail API 地址' }]}>
+                <Input placeholder="https://micrmail.startdo.cloud" />
+              </Form.Item>
+              <Form.Item name="micmail_api_key" label="API Key" rules={[{ required: true, message: '请输入 MicMail API Key' }]}>
+                <Input.Password placeholder="mic_xxx" />
+              </Form.Item>
+              <Form.Item name="micmail_mailbox" label="扫描邮箱文件夹">
+                <Select
+                  options={[
+                    { value: 'all', label: 'all' },
+                    { value: 'inbox', label: 'inbox + junk' },
+                    { value: 'junk', label: 'junk' },
+                  ]}
+                />
+              </Form.Item>
+              <Space style={{ width: '100%' }}>
+                <Form.Item name="micmail_account_page_size" label="账号页大小" style={{ flex: 1 }}>
+                  <InputNumber min={20} max={200} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="micmail_message_page_size" label="邮件页大小" style={{ flex: 1 }}>
+                  <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                </Form.Item>
+              </Space>
+              <Form.Item name="micmail_refresh" valuePropName="checked">
+                <Checkbox>轮询邮件时强制刷新</Checkbox>
+              </Form.Item>
+              <Form.Item name="micmail_category_key" label="分类 Key">
+                <Input placeholder="openai_pool" />
+              </Form.Item>
+              <Space style={{ width: '100%' }}>
+                <Form.Item name="micmail_category_name_zh" label="分类中文名" style={{ flex: 1 }}>
+                  <Input placeholder="OpenAI 账号池" />
+                </Form.Item>
+                <Form.Item name="micmail_category_name_en" label="分类英文名" style={{ flex: 1 }}>
+                  <Input placeholder="openai_pool" />
+                </Form.Item>
+              </Space>
+              <Form.Item
+                name="micmail_acquire_tag_key"
+                label="可领取标签 Key"
+                extra="首次取号前会自动校验分类/标签，缺失则自动创建。"
+              >
+                <Input placeholder="unused" />
+              </Form.Item>
+              <Space style={{ width: '100%' }}>
+                <Form.Item name="micmail_acquire_tag_name" label="可领取标签中文名" style={{ flex: 1 }}>
+                  <Input placeholder="未用" />
+                </Form.Item>
+                <Form.Item name="micmail_acquire_tag_name_en" label="可领取标签英文名" style={{ flex: 1 }}>
+                  <Input placeholder="unused" />
+                </Form.Item>
+              </Space>
+              <Space style={{ width: '100%' }}>
+                <Form.Item name="micmail_status_key_acquired" label="处理中标签 Key" style={{ flex: 1 }}>
+                  <Input placeholder="processing" />
+                </Form.Item>
+                <Form.Item name="micmail_status_acquired_name" label="处理中标签名" style={{ flex: 1 }}>
+                  <Input placeholder="处理中" />
+                </Form.Item>
+              </Space>
             </>
           )}
           {mailProvider === 'opentrashmail' && (

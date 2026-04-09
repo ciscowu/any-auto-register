@@ -34,6 +34,7 @@ const SELECT_FIELDS: Record<string, { label: string; value: string }[]> = {
     { label: 'MoeMail (sall.cc)', value: 'moemail' },
     { label: 'YYDS Mail / MaliAPI', value: 'maliapi' },
     { label: 'GPTMail', value: 'gptmail' },
+    { label: 'MicMail（账号池标签流转）', value: 'micmail' },
     { label: 'OpenTrashMail', value: 'opentrashmail' },
     { label: 'Freemail（自建 CF Worker）', value: 'freemail' },
     { label: 'CF Worker（自建域名）', value: 'cfworker' },
@@ -186,6 +187,34 @@ const TAB_ITEMS = [
           { key: 'gptmail_base_url', label: 'API URL', placeholder: 'https://mail.chatgpt.org.uk' },
           { key: 'gptmail_api_key', label: 'API Key', secret: true, placeholder: 'gpt-test' },
           { key: 'gptmail_domain', label: '邮箱域名（可选）', placeholder: 'example.com' },
+        ],
+      },
+      {
+        title: 'MicMail',
+        desc: '从 MicMail 账号池拉取邮箱；若分类/标签不存在，会在首次取号前自动初始化',
+        fields: [
+          { key: 'micmail_api_base', label: 'API URL', placeholder: 'https://micrmail.startdo.cloud' },
+          { key: 'micmail_api_key', label: 'API Key', secret: true, placeholder: 'mic_xxx' },
+          { key: 'micmail_mailbox', label: '扫描邮箱文件夹', placeholder: 'all / inbox / junk' },
+          { key: 'micmail_account_page_size', label: '账号拉取页大小', placeholder: '50' },
+          { key: 'micmail_message_page_size', label: '邮件拉取页大小', placeholder: '20' },
+          { key: 'micmail_refresh', label: '轮询时强制刷新', type: 'boolean' },
+          { key: 'micmail_category_key', label: '分类 Key', placeholder: 'openai_pool' },
+          { key: 'micmail_category_name_zh', label: '分类中文名', placeholder: 'OpenAI 账号池' },
+          { key: 'micmail_category_name_en', label: '分类英文名', placeholder: 'openai_pool' },
+          { key: 'micmail_acquire_tag_key', label: '可领取标签 Key', placeholder: 'unused' },
+          { key: 'micmail_acquire_tag_name', label: '可领取标签中文名', placeholder: '未用' },
+          { key: 'micmail_acquire_tag_name_en', label: '可领取标签英文名', placeholder: 'unused' },
+          { key: 'micmail_status_key_acquired', label: '处理中标签 Key', placeholder: 'processing' },
+          { key: 'micmail_status_acquired_name', label: '处理中标签名', placeholder: '处理中' },
+          { key: 'micmail_status_key_registered', label: '已注册标签 Key', placeholder: 'registered' },
+          { key: 'micmail_status_registered_name', label: '已注册标签名', placeholder: '已注册' },
+          { key: 'micmail_status_key_success', label: '已完成标签 Key', placeholder: 'completed' },
+          { key: 'micmail_status_success_name', label: '已完成标签名', placeholder: '已完成' },
+          { key: 'micmail_status_key_register_failed', label: '注册失败标签 Key', placeholder: 'register_failed' },
+          { key: 'micmail_status_register_fail_name', label: '注册失败标签名', placeholder: '注册失败' },
+          { key: 'micmail_status_key_oauth_failed', label: 'OAuth 失败标签 Key', placeholder: 'oauth_failed' },
+          { key: 'micmail_status_oauth_fail_name', label: 'OAuth 失败标签名', placeholder: 'OAuth 失败' },
         ],
       },
       {
@@ -425,6 +454,7 @@ const MAILBOX_SECTION_FIELD_KEY_BY_PROVIDER: Record<string, string> = {
   microsoft: 'outlook_backend',
   applemail: 'applemail_base_url',
   gptmail: 'gptmail_base_url',
+  micmail: 'micmail_api_base',
   opentrashmail: 'opentrashmail_api_url',
   duckmail: 'duckmail_api_url',
   cfworker: 'cfworker_api_url',
@@ -1634,6 +1664,71 @@ export default function Settings() {
       }
       if (!data.gptmail_base_url) {
         data.gptmail_base_url = 'https://mail.chatgpt.org.uk'
+      }
+      if (!data.micmail_api_base) {
+        data.micmail_api_base = 'https://micrmail.startdo.cloud'
+      }
+      if (!data.micmail_mailbox) {
+        data.micmail_mailbox = 'all'
+      }
+      if (!data.micmail_account_page_size) {
+        data.micmail_account_page_size = 50
+      }
+      if (!data.micmail_message_page_size) {
+        data.micmail_message_page_size = 20
+      }
+      if (String(data.micmail_refresh ?? '').trim() === '') {
+        data.micmail_refresh = true
+      } else {
+        data.micmail_refresh = parseBooleanConfigValue(data.micmail_refresh)
+      }
+      if (!data.micmail_category_key) {
+        data.micmail_category_key = 'openai_pool'
+      }
+      if (!data.micmail_category_name_zh) {
+        data.micmail_category_name_zh = 'OpenAI 账号池'
+      }
+      if (!data.micmail_category_name_en) {
+        data.micmail_category_name_en = 'openai_pool'
+      }
+      if (!data.micmail_acquire_tag_key) {
+        data.micmail_acquire_tag_key = 'unused'
+      }
+      if (!data.micmail_acquire_tag_name) {
+        data.micmail_acquire_tag_name = '未用'
+      }
+      if (!data.micmail_acquire_tag_name_en) {
+        data.micmail_acquire_tag_name_en = 'unused'
+      }
+      if (!data.micmail_status_key_acquired) {
+        data.micmail_status_key_acquired = 'processing'
+      }
+      if (!data.micmail_status_acquired_name) {
+        data.micmail_status_acquired_name = '处理中'
+      }
+      if (!data.micmail_status_key_registered) {
+        data.micmail_status_key_registered = 'registered'
+      }
+      if (!data.micmail_status_registered_name) {
+        data.micmail_status_registered_name = '已注册'
+      }
+      if (!data.micmail_status_key_success) {
+        data.micmail_status_key_success = 'completed'
+      }
+      if (!data.micmail_status_success_name) {
+        data.micmail_status_success_name = '已完成'
+      }
+      if (!data.micmail_status_key_register_failed) {
+        data.micmail_status_key_register_failed = 'register_failed'
+      }
+      if (!data.micmail_status_register_fail_name) {
+        data.micmail_status_register_fail_name = '注册失败'
+      }
+      if (!data.micmail_status_key_oauth_failed) {
+        data.micmail_status_key_oauth_failed = 'oauth_failed'
+      }
+      if (!data.micmail_status_oauth_fail_name) {
+        data.micmail_status_oauth_fail_name = 'OAuth 失败'
       }
       if (!data.maliapi_base_url) {
         data.maliapi_base_url = 'https://maliapi.215.im/v1'
