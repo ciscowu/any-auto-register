@@ -520,60 +520,6 @@ export default function RegisterTaskPage() {
               <Form.Item name="micmail_api_key" label="API Key" rules={[{ required: true, message: '请输入 MicMail API Key' }]}>
                 <Input.Password placeholder="mic_xxx" />
               </Form.Item>
-              <Form.Item name="micmail_mailbox" label="扫描邮箱文件夹">
-                <Select
-                  options={[
-                    { value: 'all', label: 'all' },
-                    { value: 'inbox', label: 'inbox + junk' },
-                    { value: 'junk', label: 'junk' },
-                  ]}
-                />
-              </Form.Item>
-              <Space style={{ width: '100%' }}>
-                <Form.Item name="micmail_account_page_size" label="账号页大小" style={{ flex: 1 }}>
-                  <InputNumber min={20} max={200} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item name="micmail_message_page_size" label="邮件页大小" style={{ flex: 1 }}>
-                  <InputNumber min={1} max={100} style={{ width: '100%' }} />
-                </Form.Item>
-              </Space>
-              <Form.Item name="micmail_refresh" valuePropName="checked">
-                <Checkbox>轮询邮件时强制刷新</Checkbox>
-              </Form.Item>
-              <Form.Item name="micmail_category_key" label="分类 Key">
-                <Input placeholder="openai_pool" />
-              </Form.Item>
-              <Space style={{ width: '100%' }}>
-                <Form.Item name="micmail_category_name_zh" label="分类中文名" style={{ flex: 1 }}>
-                  <Input placeholder="OpenAI 账号池" />
-                </Form.Item>
-                <Form.Item name="micmail_category_name_en" label="分类英文名" style={{ flex: 1 }}>
-                  <Input placeholder="openai_pool" />
-                </Form.Item>
-              </Space>
-              <Form.Item
-                name="micmail_acquire_tag_key"
-                label="可领取标签 Key"
-                extra="首次取号前会自动校验分类/标签，缺失则自动创建。"
-              >
-                <Input placeholder="unused" />
-              </Form.Item>
-              <Space style={{ width: '100%' }}>
-                <Form.Item name="micmail_acquire_tag_name" label="可领取标签中文名" style={{ flex: 1 }}>
-                  <Input placeholder="未用" />
-                </Form.Item>
-                <Form.Item name="micmail_acquire_tag_name_en" label="可领取标签英文名" style={{ flex: 1 }}>
-                  <Input placeholder="unused" />
-                </Form.Item>
-              </Space>
-              <Space style={{ width: '100%' }}>
-                <Form.Item name="micmail_status_key_acquired" label="处理中标签 Key" style={{ flex: 1 }}>
-                  <Input placeholder="processing" />
-                </Form.Item>
-                <Form.Item name="micmail_status_acquired_name" label="处理中标签名" style={{ flex: 1 }}>
-                  <Input placeholder="处理中" />
-                </Form.Item>
-              </Space>
             </>
           )}
           {mailProvider === 'opentrashmail' && (
