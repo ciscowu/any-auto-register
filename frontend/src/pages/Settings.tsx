@@ -193,7 +193,7 @@ const TAB_ITEMS = [
         title: 'MicMail',
         desc: '从 MicMail 账号池拉取邮箱；若分类/标签不存在，会在首次取号前自动初始化',
         fields: [
-          { key: 'micmail_api_base', label: 'API URL', placeholder: 'https://micrmail.startdo.cloud' },
+          { key: 'micmail_api_base', label: 'API URL', placeholder: 'https://your-micmail-host' },
           { key: 'micmail_api_key', label: 'API Key', secret: true, placeholder: 'mic_xxx' },
         ],
       },
@@ -1644,9 +1644,6 @@ export default function Settings() {
       }
       if (!data.gptmail_base_url) {
         data.gptmail_base_url = 'https://mail.chatgpt.org.uk'
-      }
-      if (!data.micmail_api_base) {
-        data.micmail_api_base = 'https://micrmail.startdo.cloud'
       }
       if (!data.micmail_mailbox) {
         data.micmail_mailbox = 'all'

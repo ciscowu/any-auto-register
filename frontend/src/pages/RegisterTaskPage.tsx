@@ -73,7 +73,7 @@ export default function RegisterTaskPage() {
         gptmail_base_url: cfg.gptmail_base_url || 'https://mail.chatgpt.org.uk',
         gptmail_api_key: cfg.gptmail_api_key || '',
         gptmail_domain: cfg.gptmail_domain || '',
-        micmail_api_base: cfg.micmail_api_base || 'https://micrmail.startdo.cloud',
+        micmail_api_base: cfg.micmail_api_base || '',
         micmail_api_key: cfg.micmail_api_key || '',
         micmail_mailbox: cfg.micmail_mailbox || 'all',
         micmail_account_page_size: cfg.micmail_account_page_size || 50,
@@ -515,7 +515,7 @@ export default function RegisterTaskPage() {
           {mailProvider === 'micmail' && (
             <>
               <Form.Item name="micmail_api_base" label="API URL" rules={[{ required: true, message: '请输入 MicMail API 地址' }]}>
-                <Input placeholder="https://micrmail.startdo.cloud" />
+                <Input placeholder="https://your-micmail-host" />
               </Form.Item>
               <Form.Item name="micmail_api_key" label="API Key" rules={[{ required: true, message: '请输入 MicMail API Key' }]}>
                 <Input.Password placeholder="mic_xxx" />

@@ -153,8 +153,6 @@ def get_config():
         all_cfg["outlook_backend"] = "graph"
     if not all_cfg.get("gptmail_base_url"):
         all_cfg["gptmail_base_url"] = "https://mail.chatgpt.org.uk"
-    if not all_cfg.get("micmail_api_base"):
-        all_cfg["micmail_api_base"] = "https://micrmail.startdo.cloud"
     if not all_cfg.get("micmail_mailbox"):
         all_cfg["micmail_mailbox"] = "all"
     if not all_cfg.get("micmail_account_page_size"):
