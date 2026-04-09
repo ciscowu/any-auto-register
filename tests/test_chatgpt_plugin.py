@@ -66,6 +66,18 @@ class _VerificationAdapter:
         return {"success": True, "password": fallback_password}
 
 
+class _ServiceTypeAdapter:
+    def __init__(self):
+        self.service_type_value = None
+
+    def run(self, context):
+        self.service_type_value = context.email_service.service_type.value
+        return mock.Mock(success=True)
+
+    def build_account(self, result, fallback_password):
+        return {"success": True, "password": fallback_password}
+
+
 class _FailingAdapter:
     def run(self, context):
         context.email_service.create_email()
@@ -133,6 +145,27 @@ class ChatGPTPluginTests(unittest.TestCase):
 
         _, kwargs = mailbox.wait_call
         self.assertEqual(kwargs.get("timeout"), 90)
+
+    def test_custom_provider_uses_configured_mail_provider_as_service_type(self):
+        mailbox = _TrackingMailbox()
+        platform = ChatGPTPlatform(
+            config=RegisterConfig(
+                extra={
+                    "chatgpt_registration_mode": "refresh_token",
+                    "mail_provider": "micmail",
+                }
+            ),
+            mailbox=mailbox,
+        )
+        adapter = _ServiceTypeAdapter()
+
+        with mock.patch(
+            "platforms.chatgpt.plugin.build_chatgpt_registration_mode_adapter",
+            return_value=adapter,
+        ):
+            platform.register()
+
+        self.assertEqual(adapter.service_type_value, "micmail")
 
     def test_custom_provider_requeues_mailbox_account_on_failure(self):
         mailbox = _RequeueMailbox()

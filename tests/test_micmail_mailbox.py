@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+from datetime import datetime, timezone
 
 from core.base_mailbox import MailboxAccount, create_mailbox
 
@@ -158,6 +159,18 @@ class MicMailMailboxTests(unittest.TestCase):
 
         self.assertEqual(code, "654321")
         self.assertEqual(mock_request.call_count, 2)
+
+    def test_parse_message_ts_treats_naive_datetime_as_utc(self):
+        mailbox = self._build_mailbox()
+
+        parsed = mailbox._parse_message_ts(
+            {"date": "2026-04-09T12:00:00"}
+        )
+
+        expected = int(
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000
+        )
+        self.assertEqual(parsed, expected)
 
 
 def _response(payload, status_code=200):

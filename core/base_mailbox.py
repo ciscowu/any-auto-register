@@ -293,7 +293,7 @@ def create_mailbox(
         )
     elif provider == "micmail":
         return MicMailMailbox(
-            api_url=extra.get("micmail_api_base", "https://micrmail.startdo.cloud"),
+            api_url=extra.get("micmail_api_base", ""),
             api_key=extra.get("micmail_api_key", ""),
             mailbox=extra.get("micmail_mailbox", "all"),
             account_page_size=extra.get("micmail_account_page_size", 50),
@@ -2051,7 +2051,7 @@ class MicMailMailbox(BaseMailbox):
 
     def __init__(
         self,
-        api_url: str = "https://micrmail.startdo.cloud",
+        api_url: str = "",
         api_key: str = "",
         mailbox: str = "all",
         account_page_size: Any = 50,
@@ -2075,7 +2075,7 @@ class MicMailMailbox(BaseMailbox):
         status_key_oauth_failed: str = "oauth_failed",
         proxy: str = None,
     ):
-        self.api = str(api_url or "https://micrmail.startdo.cloud").strip().rstrip("/")
+        self.api = str(api_url or "").strip().rstrip("/")
         self.api_key = str(api_key or "").strip()
         self.mailbox = str(mailbox or "all").strip().lower() or "all"
         self.account_page_size = self._to_int(account_page_size, 50, minimum=20)
@@ -2138,6 +2138,12 @@ class MicMailMailbox(BaseMailbox):
             "Content-Type": "application/json",
         }
 
+    def _require_configured(self) -> None:
+        if not self.api:
+            raise RuntimeError("MicMail 未配置 API URL，请先填写 micmail_api_base")
+        if not self.api_key:
+            raise RuntimeError("MicMail 未配置 API Key，请先填写 micmail_api_key")
+
     def _request_json(
         self,
         method: str,
@@ -2149,6 +2155,7 @@ class MicMailMailbox(BaseMailbox):
     ) -> Any:
         import requests
 
+        self._require_configured()
         response = requests.request(
             method,
             f"{self.api}{path}",
@@ -2345,7 +2352,7 @@ class MicMailMailbox(BaseMailbox):
         return ["inbox", "junk"]
 
     def _parse_message_ts(self, payload: dict[str, Any]) -> int:
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         if not isinstance(payload, dict):
             return 0
@@ -2358,10 +2365,11 @@ class MicMailMailbox(BaseMailbox):
             if not raw:
                 continue
             try:
-                return int(
-                    datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp()
-                    * 1000
-                )
+                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                # MicMail 若返回无时区字符串，这里统一按 UTC 解释，避免依赖宿主机时区。
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return int(parsed.timestamp() * 1000)
             except ValueError:
                 continue
         return 0

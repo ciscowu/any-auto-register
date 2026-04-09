@@ -73,6 +73,9 @@ class ChatGPTPlatform(BasePlatform):
         if self.mailbox:
             _mailbox = self.mailbox
             _fixed_email = email
+            _service_type_value = (
+                str(extra_config.get("mail_provider") or "").strip() or "custom_provider"
+            )
 
             def _resolve_email(candidate_email: str = "") -> str:
                 resolved_email = str(_fixed_email or candidate_email or "").strip()
@@ -81,7 +84,7 @@ class ChatGPTPlatform(BasePlatform):
                 return resolved_email
 
             class GenericEmailService:
-                service_type = type("ST", (), {"value": "custom_provider"})()
+                service_type = type("ST", (), {"value": _service_type_value})()
 
                 def __init__(self):
                     self._acct = None
@@ -192,11 +195,28 @@ class ChatGPTPlatform(BasePlatform):
             max_retries=max_retries,
             extra_config=extra_config,
         )
-        result = adapter.run(context)
-        if not result or not result.success:
-            raise RuntimeError(result.error_message if result else "注册失败")
 
-        return adapter.build_account(result, password)
+        mailbox_requeued = False
+
+        def _requeue_mailbox_account() -> None:
+            nonlocal mailbox_requeued
+            if mailbox_requeued:
+                return
+            requeue = getattr(self.mailbox, "requeue_account", None)
+            account = getattr(email_service, "_acct", None)
+            if callable(requeue) and account is not None:
+                requeue(account)
+                mailbox_requeued = True
+
+        try:
+            result = adapter.run(context)
+            if not result or not result.success:
+                _requeue_mailbox_account()
+                raise RuntimeError(result.error_message if result else "注册失败")
+            return adapter.build_account(result, password)
+        except Exception:
+            _requeue_mailbox_account()
+            raise
 
     def get_platform_actions(self) -> list:
         return [
