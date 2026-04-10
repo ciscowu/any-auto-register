@@ -291,8 +291,8 @@ class GrokRegister:
         return ""
 
     @staticmethod
-    def _click_turnstile_challenge_button(frame) -> bool:
-        return bool(
+    def _click_turnstile_challenge_button(frame) -> str:
+        return str(
             frame.evaluate(
                 """() => {
                     try {
@@ -313,58 +313,42 @@ class GrokRegister:
                             });
                         } catch (_) {}
 
-                        const selectors = [
-                            'input',
-                            'button',
-                            '[role="checkbox"]',
-                            '[tabindex]',
-                        ];
-
-                        const searchRoots = [];
-                        if (document.body) searchRoots.push(document.body);
-                        if (document.body?.shadowRoot) searchRoots.push(document.body.shadowRoot);
-                        if (document.documentElement?.shadowRoot) {
-                            searchRoots.push(document.documentElement.shadowRoot);
+                        const bodyRoot = document.body?.shadowRoot;
+                        if (!bodyRoot) {
+                            return 'no-body-shadow-root';
                         }
 
-                        const seen = new Set();
-                        while (searchRoots.length) {
-                            const root = searchRoots.shift();
-                            if (!root || seen.has(root)) continue;
-                            seen.add(root);
-
-                            for (const selector of selectors) {
-                                const candidate = root.querySelector?.(selector);
-                                if (candidate) {
-                                    candidate.focus?.();
-                                    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-                                        candidate.dispatchEvent(
-                                            new MouseEvent(type, {
-                                                bubbles: true,
-                                                cancelable: true,
-                                                composed: true,
-                                                view: window,
-                                                screenX,
-                                                screenY,
-                                                clientX: 18,
-                                                clientY: 18,
-                                                button: 0,
-                                                buttons: 1,
-                                            })
-                                        );
-                                    }
-                                    candidate.click?.();
-                                    return true;
-                                }
-                            }
-
-                            const descendants = root.querySelectorAll?.('*') || [];
-                            for (const node of descendants) {
-                                if (node.shadowRoot) searchRoots.push(node.shadowRoot);
-                            }
+                        const candidate =
+                            bodyRoot.querySelector('input[type="checkbox"]') ||
+                            bodyRoot.querySelector('input') ||
+                            bodyRoot.querySelector('[role="checkbox"]') ||
+                            bodyRoot.querySelector('button');
+                        if (!candidate) {
+                            return 'no-challenge-button';
                         }
-                    } catch (_) {}
-                    return false;
+
+                        candidate.focus?.();
+                        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+                            candidate.dispatchEvent(
+                                new MouseEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    composed: true,
+                                    view: window,
+                                    screenX,
+                                    screenY,
+                                    clientX: 18,
+                                    clientY: 18,
+                                    button: 0,
+                                    buttons: 1,
+                                })
+                            );
+                        }
+                        candidate.click?.();
+                        return 'clicked';
+                    } catch (error) {
+                        return `error:${error?.message || 'unknown'}`;
+                    }
                 }"""
             )
         )
@@ -453,6 +437,10 @@ class GrokRegister:
         self.log("Step5: 点击页面内 Turnstile 复选框...")
         last_error = None
         native_click_supported = self._supports_native_click()
+        try:
+            page.evaluate("try { window.turnstile?.reset?.() } catch (_) {}")
+        except Exception:
+            pass
         for attempt in range(8):
             token = self._read_turnstile_token(page)
             if token:
@@ -468,11 +456,17 @@ class GrokRegister:
 
             if frame:
                 try:
-                    if self._click_turnstile_challenge_button(frame):
+                    shadow_click_status = self._click_turnstile_challenge_button(frame)
+                    if shadow_click_status == "clicked":
+                        self.log(f"  Turnstile shadow click #{attempt + 1}: clicked")
                         token = self._wait_turnstile_token(page, wait_rounds=18, wait_ms=450)
                         if token:
                             self.log(f"  Turnstile token: {token[:40]}...")
                             return token
+                    elif shadow_click_status:
+                        self.log(
+                            f"  Turnstile shadow click #{attempt + 1}: {shadow_click_status}"
+                        )
                 except Exception as e:
                     last_error = str(e)
 

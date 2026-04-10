@@ -145,7 +145,7 @@ class GrokRegisterTurnstileFallbackTests(unittest.TestCase):
             ):
                 with mock.patch.object(register, "_read_turnstile_token", return_value=""):
                     with mock.patch.object(
-                        register, "_click_turnstile_challenge_button", return_value=True, create=True
+                        register, "_click_turnstile_challenge_button", return_value="clicked", create=True
                     ):
                         with mock.patch.object(
                             register, "_wait_turnstile_token", return_value="t" * 30
@@ -154,6 +154,36 @@ class GrokRegisterTurnstileFallbackTests(unittest.TestCase):
 
         self.assertEqual(token, "t" * 30)
         page.mouse.move.assert_not_called()
+
+    def test_shadow_dom_click_requires_clicked_status_before_skipping_page_mouse(self):
+        register = GrokRegister(log_fn=lambda *_args: None)
+        page = mock.Mock()
+        page.mouse = mock.Mock()
+        frame = mock.Mock()
+
+        with mock.patch.object(register, "_supports_native_click", return_value=False):
+            with mock.patch.object(
+                register,
+                "_find_turnstile_widget",
+                return_value=(frame, {"x": 10, "y": 20, "width": 120, "height": 40}),
+            ):
+                with mock.patch.object(register, "_read_turnstile_token", return_value=""):
+                    with mock.patch.object(
+                        register, "_click_turnstile_challenge_button", return_value="no-body-shadow-root"
+                    ):
+                        with mock.patch.object(register, "_wait_turnstile_token", return_value="") as wait_token:
+                            with mock.patch.object(register, "_has_turnstile_error", return_value=False):
+                                with mock.patch.object(
+                                    register, "_solve_turnstile_by_solver", return_value="t" * 30
+                                ):
+                                    token = register._solve_turnstile_on_page(page)
+
+        self.assertEqual(token, "t" * 30)
+        self.assertNotIn(
+            mock.call(page, wait_rounds=18, wait_ms=450),
+            wait_token.call_args_list,
+        )
+        page.mouse.move.assert_called()
 
 
 if __name__ == "__main__":
