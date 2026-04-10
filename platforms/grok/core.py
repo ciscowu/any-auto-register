@@ -19,7 +19,6 @@ from core.browser_runtime import (
     ensure_browser_display_available,
     resolve_browser_headless,
 )
-from core.proxy_utils import build_playwright_proxy_config
 
 
 UA = (
@@ -83,9 +82,7 @@ class GrokRegister:
             "channel": "msedge",
         }
         if self.proxy:
-            proxy_config = build_playwright_proxy_config(self.proxy)
-            if proxy_config:
-                launch_kwargs["proxy"] = proxy_config
+            launch_kwargs["proxy"] = {"server": self.proxy}
         try:
             browser = playwright.chromium.launch(**launch_kwargs)
         except Exception:
@@ -190,10 +187,6 @@ class GrokRegister:
     def _read_turnstile_token(page) -> str:
         return page.evaluate(
             """() => {
-                try {
-                    const response = window.turnstile?.getResponse?.();
-                    if (response) return String(response);
-                } catch (_) {}
                 return (
                     document.querySelector('input[id^="cf-chl-widget-"]')?.value ||
                     document.querySelector('input[name="cf-turnstile-response"]')?.value ||
@@ -290,81 +283,7 @@ class GrokRegister:
             page.wait_for_timeout(wait_ms)
         return ""
 
-    @staticmethod
-    def _click_turnstile_challenge_button(frame) -> str:
-        return str(
-            frame.evaluate(
-                """() => {
-                    try {
-                        const randomInt = (min, max) =>
-                            Math.floor(Math.random() * (max - min + 1)) + min;
-                        const screenX = randomInt(800, 1200);
-                        const screenY = randomInt(400, 600);
-                        window.dtp = 1;
-
-                        try {
-                            Object.defineProperty(MouseEvent.prototype, 'screenX', {
-                                configurable: true,
-                                get: () => screenX,
-                            });
-                            Object.defineProperty(MouseEvent.prototype, 'screenY', {
-                                configurable: true,
-                                get: () => screenY,
-                            });
-                        } catch (_) {}
-
-                        const bodyRoot = document.body?.shadowRoot;
-                        if (!bodyRoot) {
-                            return 'no-body-shadow-root';
-                        }
-
-                        const candidate =
-                            bodyRoot.querySelector('input[type="checkbox"]') ||
-                            bodyRoot.querySelector('input') ||
-                            bodyRoot.querySelector('[role="checkbox"]') ||
-                            bodyRoot.querySelector('button');
-                        if (!candidate) {
-                            return 'no-challenge-button';
-                        }
-
-                        candidate.focus?.();
-                        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-                            candidate.dispatchEvent(
-                                new MouseEvent(type, {
-                                    bubbles: true,
-                                    cancelable: true,
-                                    composed: true,
-                                    view: window,
-                                    screenX,
-                                    screenY,
-                                    clientX: 18,
-                                    clientY: 18,
-                                    button: 0,
-                                    buttons: 1,
-                                })
-                            );
-                        }
-                        candidate.click?.();
-                        return 'clicked';
-                    } catch (error) {
-                        return `error:${error?.message || 'unknown'}`;
-                    }
-                }"""
-            )
-        )
-
-    @staticmethod
-    def _supports_native_click() -> bool:
-        try:
-            return getattr(ctypes, "windll", None) is not None
-        except Exception:
-            return False
-
     def _native_click_turnstile(self, page, box, offset_x: float) -> str:
-        if not self._supports_native_click():
-            self.log("  当前系统不支持原生点击，跳过 native click 兜底")
-            return ""
-
         try:
             user32 = ctypes.windll.user32
             try:
@@ -436,39 +355,13 @@ class GrokRegister:
     def _solve_turnstile_on_page(self, page) -> str:
         self.log("Step5: 点击页面内 Turnstile 复选框...")
         last_error = None
-        native_click_supported = self._supports_native_click()
-        try:
-            page.evaluate("try { window.turnstile?.reset?.() } catch (_) {}")
-        except Exception:
-            pass
         for attempt in range(8):
-            token = self._read_turnstile_token(page)
-            if token:
-                self.log(f"  Turnstile token: {token[:40]}...")
-                return token
-
             frame, box = self._find_turnstile_widget(page)
             if not box:
                 page.wait_for_timeout(1000)
                 if last_error is None:
                     last_error = "未找到可点击的 Turnstile iframe"
                 continue
-
-            if frame:
-                try:
-                    shadow_click_status = self._click_turnstile_challenge_button(frame)
-                    if shadow_click_status == "clicked":
-                        self.log(f"  Turnstile shadow click #{attempt + 1}: clicked")
-                        token = self._wait_turnstile_token(page, wait_rounds=18, wait_ms=450)
-                        if token:
-                            self.log(f"  Turnstile token: {token[:40]}...")
-                            return token
-                    elif shadow_click_status:
-                        self.log(
-                            f"  Turnstile shadow click #{attempt + 1}: {shadow_click_status}"
-                        )
-                except Exception as e:
-                    last_error = str(e)
 
             click_x = box["x"] + min(28, max(18, box["width"] * 0.08))
             click_y = box["y"] + box["height"] / 2
@@ -496,16 +389,15 @@ class GrokRegister:
             except Exception as e:
                 last_error = str(e)
 
-            if native_click_supported:
-                try:
-                    token = self._native_click_turnstile(
-                        page, box, min(28, max(18, box["width"] * 0.08))
-                    )
-                    if token:
-                        self.log(f"  Turnstile token: {token[:40]}...")
-                        return token
-                except Exception as e:
-                    last_error = str(e)
+            try:
+                token = self._native_click_turnstile(
+                    page, box, min(28, max(18, box["width"] * 0.08))
+                )
+                if token:
+                    self.log(f"  Turnstile token: {token[:40]}...")
+                    return token
+            except Exception as e:
+                last_error = str(e)
 
             if self._has_turnstile_error(page):
                 self.log("  检测到 Turnstile 验证失败提示，准备重试...")
